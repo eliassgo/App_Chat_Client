@@ -1,6 +1,3 @@
-// MAIN 
-
-// DataBaseConnection
 
 var express = require('express')
 var bodyParser = require('body-parser')
@@ -13,7 +10,13 @@ app.use(express.static(__dirname))
 app.use(bodyParser.json())
 app.use(bodyParser.urlencoded({extended:false}))
 
+mongoose.Promise = Promise
+
 var dbUrl = 'mongodb+srv://user:user@appnode.xk12iyk.mongodb.net/learning-node'
+
+io.on('connection', (socket) => {
+    console.log('a user connected')
+})
 
 var Message = mongoose.model('Message', {
     name: String,
@@ -23,29 +26,50 @@ var Message = mongoose.model('Message', {
 app.get('/messages', (req, res) => {
     Message.find({}).then((messages) => {
         res.send(messages)
-    })
-    .catch((err) =>{
+    }).catch((err) =>{
         console.error(err);
         res.sendStatus(500);
     })
 })
 
+app.get('/messages/:user', (req, res) => {
 
-app.post('/messages', (req, res) => {
-    var message = new Message(req.body)
-    
-    message.save().then(() => {
-            io.emit('message', req.body)
-            res.sendStatus(200)
-        })
-        .catch((err) => {
-            res.sendStatus(500)
-        })
+    var user = req.params.user
+
+    Message.find({name: user}).then((messages) => {
+        res.send(messages)
+    }).catch((err) =>{
+        console.error(err);
+        res.sendStatus(500);
+    })
 })
 
-io.on('connection', (socket) => {
-    console.log('a user connected')
-})
+app.post('/messages', async (req, res) => {
+
+    try {
+
+        var message = new Message(req.body);
+
+        var savedMessage = await message.save();
+        
+        console.log('saved')
+
+        var censored = await Message.findOne({ message: 'badword' });
+
+        if (censored)
+            await Message.deleteOne({ _id: censored.id }); // Usando deleteOne() para remover
+        else
+            io.emit('message', req.body);
+
+        res.sendStatus(200);
+    } catch (error) {
+        res.sendStatus(500);
+        return console.error(error);
+        
+    } finally {
+        console.log('message post called')
+    }
+});
 
 mongoose.connect(dbUrl, { useNewUrlParser: true, useUnifiedTopology: true })
     .then(() => {
